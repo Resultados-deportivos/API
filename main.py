@@ -10,15 +10,10 @@ from sqlalchemy import Table, Column, Integer, String, DateTime
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
 
-#pip install Jinja2
-#pip install python-multipart
-#pip install uvicorn
-#uvicorn controladorApi:app --host localhost --port 8000 --reload
-
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("controladorApi:app", host="localhost", port=8080, reload=True)
+    uvicorn.run("main:app", host="localhost", port=8080, reload=True)
 
 app = FastAPI()
 

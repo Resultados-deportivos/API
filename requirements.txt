@@ -1,0 +1,7 @@
+# pip freeze > requirements.txt (delete this line)
+fastapi
+databases
+sqlalchemy
+pydantic
+starlette
+uvicorn

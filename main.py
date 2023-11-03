@@ -2,11 +2,24 @@ from fastapi import FastAPI, HTTPException, Form, Request, Query
 from datetime import datetime, date, time
 import databases
 import sqlalchemy
+import requests
 from pydantic import BaseModel
-from sqlalchemy import Table, Column, Integer, String
+from fastapi.templating import Jinja2Templates
+from fastapi import Depends
+from sqlalchemy import Table, Column, Integer, String, DateTime, Date, asc, Time, Boolean
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.staticfiles import StaticFiles
+from hashlib import sha256
 
 
+'''
+pip install fastapi.middleware.cors
+pip install Jinja2
+pip install python-multipart
+pip install uvicorn
+uvicorn controladorApi:app --host localhost --port 8000 --reload
+'''
 
 if __name__ == "__main__":
     import uvicorn
@@ -22,7 +35,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 database_name = "eusko_basket"
@@ -166,21 +179,100 @@ class likes(BaseModel):
     likecount: int
 
 
+
+postst = Table(
+    "publicaciones",
+    metadata,
+    Column("id", Integer),
+    Column("img", String(255)),
+    Column("titulo", String(255)),
+    Column("descripcion", String(255))
+)
+
+class publicaciones (BaseModel):
+    id: int
+    img: str
+    titulo: str
+    descripcion: str
+
+
+
+
+logs = Table(
+    "registros",
+    metadata,
+    Column("id", Integer),
+    Column("eventoid", Integer),
+    Column("jugadorid", Integer),
+    Column("accion", String(255)),
+    Column("minuto", Integer)
+)
+
+class registros (BaseModel):
+    id: int
+    eventoid: int
+    jugadorid: int
+    accion: str
+    minuto: int
+
+
+
+points = Table(
+    "puntos",
+    metadata,
+    Column("id", Integer),
+    Column("eventoid", Integer),
+    Column("puntos", String(100))
+
+)
+
+class puntos (BaseModel):
+    id: int
+    eventoid: int
+    puntos: str
+
+
+
+users = Table(
+    "usuarios",
+    metadata,
+    Column("id", Integer),
+    Column("nombre", String(255)),
+    Column("contrasena", String(255)),
+    Column("correo", String(255)),
+    Column("admin", Boolean)
+
+)
+
+class usuarios (BaseModel):
+    id: int
+    nombre: str
+    contrasena: str
+    correo: str
+    admin: bool
+
+
+
+
 class APIKeyHeader(BaseModel):
     apikey: str
 
 
 apikey = "apikey"
 
+
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
-    if request.method != "GET":
-        # Check if the API key is provided in the "X-API-Key" header
+    if (request.url.path == "/basket/users" and request.method == "GET") or request.method != "GET":
+        # Check if the API key is provided in the "apikey" header
         api_key_header = request.headers.get("apikey")
         if api_key_header != app.state.api_key:
             raise HTTPException(status_code=403, detail="API Key is invalid")
+
     response = await call_next(request)
     return response
+
+
 
 @app.on_event("startup")
 async def startup_db_client():
@@ -426,8 +518,8 @@ async def get_users(id: int = Query(None), nombre: str = Query(None), correo: st
         params['nombre'] = nombre
 
     if correo is not None:
-        conditions.append("correo LIKE :correo")
-        params['correo'] = f"%{correo}%"  # Adding '%' for partial match
+        conditions.append("correo = :correo")
+        params['correo'] = correo
 
     if admin is not None:
         conditions.append("admin = :admin")
@@ -577,6 +669,73 @@ async def create_likes(like:likes):
     return {"id": like.id, **like.dict()}
 
 
+
+@app.post("/basket/posts")
+async def create_post(post:publicaciones):
+
+    query = postst.insert().values(
+        id=post.id,
+        img=post.img,
+        titulo=post.titulo,
+        descripcion=post.descripcion
+
+    )
+    await database.execute(query)
+    return {"id": post.id, **post.dict()}
+
+
+
+
+@app.post("/basket/logs")
+async def create_log(log:registros):
+
+    query = logs.insert().values(
+        id=log.id,
+        eventoid=log.eventoid,
+        jugadorid=log.jugadorid,
+        accion=log.accion,
+        minuto=log.minuto
+
+    )
+    await database.execute(query)
+    return {"id": log.id, **log.dict()}
+
+
+
+
+
+@app.post("/basket/points")
+async def create_points(punt:puntos):
+
+    query = points.insert().values(
+        id=punt.id,
+        eventoid=punt.eventoid,
+        puntos=punt.puntos
+
+    )
+    await database.execute(query)
+    return {"id": punt.id, **punt.dict()}
+
+
+
+@app.post("/basket/users")
+async def create_user(usr:usuarios):
+
+    sha256(usr.contrasena.encode('utf-8')).hexdigest()
+
+    query = users.insert().values(
+        id=usr.id,
+        nombre=usr.nombre,
+        contrasena= sha256(usr.contrasena.encode('utf-8')).hexdigest(),
+        correo=usr.correo,
+        admin=usr.admin
+
+    )
+    await database.execute(query)
+    return {"id": usr.id, **usr.dict()}
+
+
+
 #-----------------------------------------------------------------------------------------------
 #--------------------------------------POST REQUESTS--------------------------------------------
 #-----------------------------------------------------------------------------------------------
@@ -702,6 +861,70 @@ async def update_like(id: int, like: likes):
 
     return {"message": f"Like with ID {id} has been updated"}
 
+
+
+@app.put("/basket/posts/{id}")
+async def update_post(id: int, post: publicaciones):
+    # Create a query to update the comment's information
+    query = postst.update().where(postst.c.id == id).values(
+        id=id,
+        img=post.img,
+        titulo=post.titulo,
+        descripcion=post.descripcion
+    )
+    await database.execute(query)
+
+    return {"message": f"Post with ID {id} has been updated"}
+
+
+
+@app.put("/basket/logs/{id}")
+async def update_log(id: int, log: registros):
+
+    query = logs.update().where(logs.c.id == id).values(
+        id=log.id,
+        eventoid=log.eventoid,
+        jugadorid=log.jugadorid,
+        accion=log.accion,
+        minuto=log.minuto
+    )
+
+    # Execute the query to update the player
+    await database.execute(query)
+
+    return {"message": "Log information updated successfully"}
+
+
+@app.put("/basket/points/{id}")
+async def update_points(id:int,punt:puntos):
+
+    query = points.update().where(points.c.id == id).values(
+        id=punt.id,
+        eventoid=punt.eventoid,
+        puntos=punt.puntos
+    )
+
+    # Execute the query to update the comment
+    await database.execute(query)
+    return {"message": "Point information updated successfully"}
+
+
+@app.put("/basket/users/{id}")
+async def update_user(id: int, user: usuarios):
+    # Update the user in the database
+    query = users.update().where(users.c.id == id).values(
+        id=user.id,
+        nombre=user.nombre,
+        contrasena=sha256(user.contrasena.encode('utf-8')).hexdigest(),
+        correo=user.correo,
+        admin=user.admin
+    )
+
+    # Execute the query to update the user
+    await database.execute(query)
+    return {"message": "User information updated successfully"}
+
+
 #-----------------------------------------------------------------------------------------------
 #--------------------------------------PUT REQUESTS---------------------------------------------
 #-----------------------------------------------------------------------------------------------
@@ -779,9 +1002,71 @@ async def delete_stadium(id: int):
 
     return {"message": f"Stadium with ID {id} has been deleted"}
 
+
+
+@app.delete("/basket/likes/{id}")
+async def delete_like(id: int):
+    # Create a query to delete the comment with the specified ID
+    query = likest.delete().where(likest.c.id == id)
+
+    # Execute the query to delete the comment
+    await database.execute(query)
+
+    return {"message": f"Like with ID {id} has been deleted"}
+
+
+
+@app.delete("/basket/posts/{id}")
+async def delete_player(id: int):
+    # Create a query to delete the player with the specified ID
+    query = postst.delete().where(postst.c.id == id)
+
+    # Execute the query to delete the player
+    await database.execute(query)
+
+    return {"message": f"post with ID {id} has been deleted"}
+
+
+
+@app.delete("/basket/logs/{id}")
+async def delete_log(id: int):
+    # Create a query to delete the player with the specified ID
+    query = logs.delete().where(logs.c.id == id)
+
+    # Execute the query to delete the player
+    await database.execute(query)
+
+    return {"message": f"log with ID {id} has been deleted"}
+
+
+
+@app.delete("/basket/points/{id}")
+async def delete_point(id: int):
+    # Create a query to delete the player with the specified ID
+    query = points.delete().where(points.c.id == id)
+
+    # Execute the query to delete the player
+    await database.execute(query)
+
+    return {"message": f"Point with ID {id} has been deleted"}
+
+
+@app.delete("/basket/users/{id}")
+async def delete_user(id: int):
+    # Create a query to delete the player with the specified ID
+    query = users.delete().where(users.c.id == id)
+
+    # Execute the query to delete the player
+    await database.execute(query)
+
+    return {"message": f"User with ID {id} has been deleted"}
+
+
+
 #-----------------------------------------------------------------------------------------------
 #--------------------------------------DELETE REQUESTS------------------------------------------
 #-----------------------------------------------------------------------------------------------
+
 
 
 

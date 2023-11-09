@@ -486,30 +486,48 @@ async def get_stadiums(id: int = Query(None), localizacion: str = Query(None)):
     return comments
 
 
-async def get_like_count_for_publication(id, likecount):
-    query = f"select count(*) from likes where publicacionid = {id} and likecount = {likecount};"
-    count = await database.fetch_val(query)
-    return {"publicacionid": id, "like_count": count}
+async def get_like_count_for_publication(id):
+
+    query = f"select count(*) from likes where publicacionid = {id} and likecount = 1;"
+    likes = await database.fetch_val(query)
+
+    query2 = f"select count(*) from likes where publicacionid = {id} and likecount = 0;"
+    dislikes = await database.fetch_val(query2)
+
+    total = likes-dislikes
+    return {"publicacionid": id, "likes": likes, "dislikes":dislikes, "total":total}
 
 
 @app.get("/basket/likesCount")
-async def get_likes_count(id: int = Query(None), likecount: int = Query(None)):
-    if id is not None and likecount is not None:
-        result = await get_like_count_for_publication(id, likecount)
+async def get_likes_count(id: int = Query(None)):
+    if id is not None:
+        result = await get_like_count_for_publication(id)
         return result
-    else:
-        all_publications_query = "SELECT * FROM likes"
-        all_publications = await database.fetch_all(all_publications_query)
 
-        # like_counts = await asyncio.gather(
-        #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
-        # )
 
-        return all_publications
+       #like_counts = await asyncio.gather(
+       #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
+       #)
+
+
+@app.get("/basket/userlikes")
+async def get_user_likes(iduser: int = Query(None), idpublicacion: int = Query(None)):
+    if iduser is not None and idpublicacion is not None:
+
+        query = f"SELECT * FROM likes WHERE USUARIOID = {iduser} AND PUBLICACIONID = {idpublicacion}"
+        likescount = await database.fetch_all(query)
+
+       #like_counts = await asyncio.gather(
+       #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
+       #)
+
+        return likescount
+
+
 
 
 @app.get("/basket/likes")
-async def get_likes(id: int = Query(None), usuarioid: int = Query(None), publicacionid: int = Query(None)):
+async def get_likes(id: int = Query(None),usuarioid: int = Query(None), publicacionid: int = Query(None)):
     query = "SELECT * FROM likes"
     conditions = []
     params = {}
@@ -531,7 +549,6 @@ async def get_likes(id: int = Query(None), usuarioid: int = Query(None), publica
 
     comments = await database.fetch_all(query, values=params)
     return comments
-
 
 @app.get("/basket/posts")
 async def get_posts(id: int = Query(None), titulo: str = Query(None)):

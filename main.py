@@ -1,6 +1,5 @@
 from datetime import datetime, date, time
 from hashlib import sha256
-
 import databases
 import sqlalchemy
 from fastapi import FastAPI, HTTPException, Request, Query
@@ -10,6 +9,7 @@ from sqlalchemy import Table, Column, Integer, String, Boolean
 from sqlalchemy.util import asyncio
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
+
 '''
 TODO: MIRAR CONFIGURACION PARA EL UTF-8, Ñ, ACENTOS...
 '''
@@ -20,6 +20,7 @@ pip install Jinja2
 pip install python-multipart
 pip install uvicorn
 uvicorn controladorApi:app --host localhost --port 8000 --reload
+
 '''
 
 if __name__ == "__main__":
@@ -33,12 +34,12 @@ if __name__ == "__main__":
     # utilizado para servir aplicaciones web construidas en FastAPI y otros frameworks similares.
 
     uvicorn.run("main:app", host="localhost", port=8080, reload=True)
-    # Esta línea llama a la función 'uvicorn.run' para iniciar el servidor web.
-    # - "controladorApi:app" es el argumento que especifica qué aplicación ASGI se debe ejecutar.
-    #   En este caso, 'controladorApi' es el nombre del módulo que contiene la aplicación FastAPI, y 'app' es la instancia de la aplicación FastAPI.
-    # - 'host="localhost"' especifica que el servidor escuchará en el host local (127.0.0.1).
-    # - 'port=8080' especifica que el servidor escuchará en el puerto 8080.
-    # - 'reload=True' indica que el servidor debe recargar automáticamente cuando se realicen cambios en el código.
+    # Esta línea llama a la función 'uvicorn.run' para iniciar el servidor web. - "controladorApi:app" es el
+    # argumento que especifica qué aplicación ASGI se debe ejecutar. En este caso, 'controladorApi' es el nombre del
+    # módulo que contiene la aplicación FastAPI, y 'app' es la instancia de la aplicación FastAPI. -
+    # 'host="localhost"' especifica que el servidor escuchará en el host local (127.0.0.1). - 'port=8080' especifica
+    # que el servidor escuchará en el puerto 8080. - 'reload=True' indica que el servidor debe recargar
+    # automáticamente cuando se realicen cambios en el código.
 
     '''
 
@@ -155,7 +156,9 @@ comments = Table(
     Column("id", Integer),
     Column("idusuario", Integer),
     Column("publicacionid", Integer),
-    Column("descripcion", String(255))
+    Column("descripcion", String(255)),
+    Column("date", String(12)),
+    Column("time", String(12))
 )
 
 
@@ -163,6 +166,8 @@ class comentarios(BaseModel):
     idusuario: int
     publicacionid: int
     descripcion: str
+    date: str
+    time: str
 
 
 events = Table(
@@ -173,7 +178,7 @@ events = Table(
     Column("fecha", String(12)),  # Formato 2013-11-11
     Column("horainicio", String(12)),  # Formato 18:00:00
     Column("horafin", String(12)),  # Formato 22:00:00
-    Column("temporada", String),
+    Column("temporada", Integer),
     Column("idestadios", Integer),
     Column("idliga", Integer)
 )
@@ -184,7 +189,7 @@ class eventos(BaseModel):
     fecha: str
     horainicio: str
     horafin: str
-    temporada: str
+    temporada: int
     idestadios: int
     idliga: int
 
@@ -391,8 +396,8 @@ async def get_events(id: int = Query(None), fecha: date = Query(None), temporada
     if obf:
         query += " ORDER BY fecha DESC"
 
-    comments = await database.fetch_all(query, values=params)
-    return comments
+    events = await database.fetch_all(query, values=params)
+    return events
 
 
 @app.get("/basket/teams")
@@ -441,7 +446,8 @@ async def get_teams(id: int = Query(None), nombre: str = Query(None)):
 
 
 @app.get("/basket/comments")
-async def get_comments(id: int = Query(None), idusuario: int = Query(None), publicacionid: int = Query(None)):
+async def get_comments(id: int = Query(None), idusuario: int = Query(None), publicacionid: int = Query(None),
+                       obf: bool = Query(None)):
     query = "SELECT * FROM comentarios"
     conditions = []
     params = {}
@@ -460,6 +466,9 @@ async def get_comments(id: int = Query(None), idusuario: int = Query(None), publ
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
+
+    if obf:
+        query += " ORDER BY date DESC, time DESC"
 
     comments = await database.fetch_all(query, values=params)
     return comments
@@ -487,15 +496,18 @@ async def get_stadiums(id: int = Query(None), localizacion: str = Query(None)):
 
 
 async def get_like_count_for_publication(id):
+    validateid = f"select * from likes where publicacionid = {id};"
+    idexist = await database.fetch_val(validateid)
 
-    query = f"select count(*) from likes where publicacionid = {id} and likecount = 1;"
-    likes = await database.fetch_val(query)
+    if idexist:
+        query = f"select count(*) from likes where publicacionid = {id} and likecount = 1;"
+        likes = await database.fetch_val(query)
 
-    query2 = f"select count(*) from likes where publicacionid = {id} and likecount = 0;"
-    dislikes = await database.fetch_val(query2)
+        query2 = f"select count(*) from likes where publicacionid = {id} and likecount = 0;"
+        dislikes = await database.fetch_val(query2)
 
-    total = likes-dislikes
-    return {"publicacionid": id, "likes": likes, "dislikes":dislikes, "total":total}
+        total = likes - dislikes
+        return {"publicacionid": id, "likes": likes, "dislikes": dislikes, "total": total}
 
 
 @app.get("/basket/likesCount")
@@ -504,30 +516,26 @@ async def get_likes_count(id: int = Query(None)):
         result = await get_like_count_for_publication(id)
         return result
 
-
-       #like_counts = await asyncio.gather(
-       #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
-       #)
+    # like_counts = await asyncio.gather(
+    #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
+    # )
 
 
 @app.get("/basket/userlikes")
 async def get_user_likes(iduser: int = Query(None), idpublicacion: int = Query(None)):
     if iduser is not None and idpublicacion is not None:
-
         query = f"SELECT * FROM likes WHERE USUARIOID = {iduser} AND PUBLICACIONID = {idpublicacion}"
         likescount = await database.fetch_all(query)
 
-       #like_counts = await asyncio.gather(
-       #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
-       #)
+        # like_counts = await asyncio.gather(
+        #    *[get_like_count_for_publication(publicacion['publicacionid']) for publicacion in all_publications]
+        # )
 
         return likescount
 
 
-
-
 @app.get("/basket/likes")
-async def get_likes(id: int = Query(None),usuarioid: int = Query(None), publicacionid: int = Query(None)):
+async def get_likes(id: int = Query(None), usuarioid: int = Query(None), publicacionid: int = Query(None)):
     query = "SELECT * FROM likes"
     conditions = []
     params = {}
@@ -549,6 +557,7 @@ async def get_likes(id: int = Query(None),usuarioid: int = Query(None), publicac
 
     comments = await database.fetch_all(query, values=params)
     return comments
+
 
 @app.get("/basket/posts")
 async def get_posts(id: int = Query(None), titulo: str = Query(None)):
@@ -701,10 +710,14 @@ async def create_league(liga: ligas):
 
 @app.post("/basket/comments")
 async def create_comment(comentario: comentarios):
+    hora = time.fromisoformat(comentario.time)
+    fecha = date.fromisoformat(comentario.date)
     query = comments.insert().values(
         idusuario=comentario.idusuario,
         publicacionid=comentario.publicacionid,
-        descripcion=comentario.descripcion
+        descripcion=comentario.descripcion,
+        date=fecha,
+        time=hora
     )
     await database.execute(query)
     return {"idusuario": comentario.idusuario, **comentario.dict()}
@@ -712,7 +725,6 @@ async def create_comment(comentario: comentarios):
 
 @app.post("/basket/events")
 async def create_event(evento: eventos):
-    # Convert the time strings to datetime.time objects
     horainicio = time.fromisoformat(evento.horainicio)
     horafin = time.fromisoformat(evento.horafin)
     fecha = date.fromisoformat(evento.fecha)
@@ -757,7 +769,6 @@ async def create_post(post: publicaciones):
         img=post.img,
         titulo=post.titulo,
         descripcion=post.descripcion
-
     )
     await database.execute(query)
     return {"img": post.img, **post.dict()}
@@ -788,13 +799,11 @@ async def create_points(punt: puntos):
 @app.post("/basket/users")
 async def create_user(usr: usuarios):
     sha256(usr.contrasena.encode('utf-8')).hexdigest()
-
     query = users.insert().values(
         nombre=usr.nombre,
         contrasena=sha256(usr.contrasena.encode('utf-8')).hexdigest(),
         correo=usr.correo,
         admin=usr.admin
-
     )
     await database.execute(query)
     return {"Correo": usr.correo, **usr.dict()}
@@ -822,8 +831,6 @@ async def update_player(player_id: int, player: jugadores):
         peso=player.peso,
         numero=player.numero
     )
-
-    # Execute the query to update the player
     await database.execute(query)
 
     return {"message": "Player information updated successfully"}
@@ -832,7 +839,6 @@ async def update_player(player_id: int, player: jugadores):
 @app.put("/basket/teams/{team_id}")
 async def update_team(team_id: int, equipo: equipos):
     query = teams.update().where(teams.c.id == team_id).values(
-
         nombre=equipo.nombre,
         ciudad=equipo.ciudad,
         logo=equipo.logo,
@@ -845,7 +851,6 @@ async def update_team(team_id: int, equipo: equipos):
 
 @app.put("/basket/leagues/{league_id}")
 async def update_league(league_id: int, league: ligas):
-    # Create a query to update the league's information
     query = leagues.update().where(leagues.c.id == league_id).values(
         nombre=league.nombre,
         logo=league.logo,
@@ -854,7 +859,6 @@ async def update_league(league_id: int, league: ligas):
         web=league.web
     )
 
-    # Execute the query to update the league
     await database.execute(query)
 
     return {"message": "League information updated successfully"}
@@ -862,26 +866,22 @@ async def update_league(league_id: int, league: ligas):
 
 @app.put("/basket/comments/{comment_id}")
 async def update_comment(comment_id: int, comment: comentarios):
-    # Create a query to update the comment's information
     query = comments.update().where(comments.c.id == comment_id).values(
         idusuario=comment.idusuario,
         publicacionid=comment.publicacionid,
         descripcion=comment.descripcion
     )
 
-    # Execute the query to update the comment
     await database.execute(query)
     return {"message": "Comment information updated successfully"}
 
 
 @app.put("/basket/events/{event_id}")
 async def update_event(event_id: int, event_data: eventos):
-    # Convert the time strings to datetime.time objects
     horainicio = time.fromisoformat(event_data.horainicio)
     horafin = time.fromisoformat(event_data.horafin)
     fecha = date.fromisoformat(event_data.fecha)
 
-    # Create a query to update the event data
     query = events.update().where(events.c.id == event_id).values(
 
         nombre=event_data.nombre,
@@ -893,7 +893,6 @@ async def update_event(event_id: int, event_data: eventos):
         idliga=event_data.idliga
     )
 
-    # Execute the query to update the event
     await database.execute(query)
 
     return {"message": f"Event with ID {event_id} has been updated"}
@@ -901,7 +900,6 @@ async def update_event(event_id: int, event_data: eventos):
 
 @app.put("/basket/stadiums/{id}")
 async def update_stadium(id: int, estadio: estadios):
-    # Create a query to update the comment's information
     query = stadiums.update().where(stadiums.c.id == id).values(
         localizacion=estadio.localizacion,
         capacidad=estadio.capacidad
@@ -913,7 +911,6 @@ async def update_stadium(id: int, estadio: estadios):
 
 @app.put("/basket/likes/{id}")
 async def update_like(id: int, like: likes):
-    # Create a query to update the comment's information
     query = likest.update().where(likest.c.id == id).values(
 
         publicacionid=like.publicacionid,
@@ -927,7 +924,6 @@ async def update_like(id: int, like: likes):
 
 @app.put("/basket/posts/{id}")
 async def update_post(id: int, post: publicaciones):
-    # Create a query to update the comment's information
     query = postst.update().where(postst.c.id == id).values(
         img=post.img,
         titulo=post.titulo,
@@ -941,14 +937,11 @@ async def update_post(id: int, post: publicaciones):
 @app.put("/basket/logs/{id}")
 async def update_log(id: int, log: registros):
     query = logs.update().where(logs.c.id == id).values(
-
         eventoid=log.eventoid,
         jugadorid=log.jugadorid,
         accion=log.accion,
         minuto=log.minuto
     )
-
-    # Execute the query to update the player
     await database.execute(query)
 
     return {"message": "Log information updated successfully"}
@@ -957,19 +950,16 @@ async def update_log(id: int, log: registros):
 @app.put("/basket/points/{id}")
 async def update_points(id: int, punt: puntos):
     query = points.update().where(points.c.id == id).values(
-
         eventoid=punt.eventoid,
         puntos=punt.puntos
     )
 
-    # Execute the query to update the comment
     await database.execute(query)
     return {"message": "Point information updated successfully"}
 
 
 @app.put("/basket/users/{id}")
 async def update_user(id: int, user: usuarios):
-    # Update the user in the database
     query = users.update().where(users.c.id == id).values(
 
         nombre=user.nombre,
@@ -977,8 +967,6 @@ async def update_user(id: int, user: usuarios):
         correo=user.correo,
         admin=user.admin
     )
-
-    # Execute the query to update the user
     await database.execute(query)
     return {"message": "User information updated successfully"}
 
@@ -995,11 +983,8 @@ async def update_user(id: int, user: usuarios):
 
 @app.delete("/basket/players/{player_id}")
 async def delete_player(player_id: int):
-    # Create a query to delete the player with the specified ID
     query = players.delete().where(players.c.id == player_id)
-    # Execute the query to delete the player
     await database.execute(query)
-
     return {"message": f"Player with ID {player_id} has been deleted"}
 
 
@@ -1077,7 +1062,6 @@ async def delete_user(id: int):
 # --------------------------------------DELETE REQUESTS------------------------------------------
 # -----------------------------------------------------------------------------------------------
 
-
 # -----------------------------------------------------------------------------------------------
 # -------------------------------REGISTER AND SIGN IN REQUESTS-----------------------------------
 # -----------------------------------------------------------------------------------------------
@@ -1132,10 +1116,3 @@ async def login_user(user_data: UserLogin):
 # -----------------------------------------------------------------------------------------------
 # -------------------------------REGISTER AND SIGN IN REQUESTS-----------------------------------
 # -----------------------------------------------------------------------------------------------
-
-
-
-
-
-
-

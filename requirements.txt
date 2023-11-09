@@ -6,3 +6,14 @@ pydantic
 starlette
 uvicorn
 passlib.hash
+datetime
+hashlib
+databases
+sqlalchemy
+fastapi
+passlib.hash
+pydantic
+sqlalchemy
+sqlalchemy.util
+starlette.middleware.cors
+uvicorn

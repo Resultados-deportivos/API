@@ -1,5 +1,6 @@
 from datetime import datetime, date, time
 from hashlib import sha256
+
 import databases
 import sqlalchemy
 from fastapi import FastAPI, HTTPException, Request, Query
@@ -8,7 +9,6 @@ from pydantic import BaseModel
 from sqlalchemy import Table, Column, Integer, String, Boolean
 from sqlalchemy.util import asyncio
 from starlette.middleware.cors import CORSMiddleware
-import uvicorn
 
 '''
 TODO: MIRAR CONFIGURACION PARA EL UTF-8, Ñ, ACENTOS...
@@ -28,18 +28,18 @@ if __name__ == "__main__":
     # En Python, cuando ejecutas un script, __name__ se establece en "__main__".
     # Esto garantiza que el código debajo de esta condición solo se ejecutará si este script se ejecuta directamente.
 
-
+    import uvicorn
 
     # Importamos el módulo 'uvicorn', que es un servidor ASGI (Asynchronous Server Gateway Interface)
     # utilizado para servir aplicaciones web construidas en FastAPI y otros frameworks similares.
 
     uvicorn.run("main:app", host="localhost", port=8080, reload=True)
-    # Esta línea llama a la función 'uvicorn.run' para iniciar el servidor web. - "controladorApi:app" es el
-    # argumento que especifica qué aplicación ASGI se debe ejecutar. En este caso, 'controladorApi' es el nombre del
-    # módulo que contiene la aplicación FastAPI, y 'app' es la instancia de la aplicación FastAPI. -
-    # 'host="localhost"' especifica que el servidor escuchará en el host local (127.0.0.1). - 'port=8080' especifica
-    # que el servidor escuchará en el puerto 8080. - 'reload=True' indica que el servidor debe recargar
-    # automáticamente cuando se realicen cambios en el código.
+    # Esta línea llama a la función 'uvicorn.run' para iniciar el servidor web.
+    # - "controladorApi:app" es el argumento que especifica qué aplicación ASGI se debe ejecutar.
+    #   En este caso, 'controladorApi' es el nombre del módulo que contiene la aplicación FastAPI, y 'app' es la instancia de la aplicación FastAPI.
+    # - 'host="localhost"' especifica que el servidor escuchará en el host local (127.0.0.1).
+    # - 'port=8080' especifica que el servidor escuchará en el puerto 8080.
+    # - 'reload=True' indica que el servidor debe recargar automáticamente cuando se realicen cambios en el código.
 
     '''
 
@@ -49,8 +49,9 @@ if __name__ == "__main__":
 # A través de 'app', podremos definir rutas, endpoints, modelos de datos y más para nuestra aplicación.
 # FastAPI es un moderno framework web que facilita la creación de API RESTful en Python.
 # Con 'app', podemos configurar y personalizar nuestra aplicación web de acuerdo a nuestras necesidades.
-app = FastAPI()
 
+
+app = FastAPI()
 # Configure CORS
 origins = ["*"]  # You should specify the allowed origins
 
@@ -211,7 +212,6 @@ class estadios(BaseModel):
 likest = Table(
     "likes",
     metadata,
-    Column("id", Integer),
     Column("publicacionid", Integer),
     Column("usuarioid", Integer),
     Column("likecount", Integer)
@@ -909,17 +909,15 @@ async def update_stadium(id: int, estadio: estadios):
     return {"message": f"Stadium with ID {id} has been updated"}
 
 
-@app.put("/basket/likes/{id}")
-async def update_like(id: int, like: likes):
-    query = likest.update().where(likest.c.id == id).values(
-
-        publicacionid=like.publicacionid,
-        usuarioid=like.usuarioid,
-        likecount=like.likecount
-    )
+@app.put("/basket/likes/{id1},{id2},{like}")
+async def update_like(id1: int, id2: int, like: int):
+    likecount = like
+    publicacionid = id1
+    usuarioid = id2
+    query = f"UPDATE likes SET likecount = {likecount} WHERE publicacionid = {publicacionid} AND usuarioid = {usuarioid}"
     await database.execute(query)
 
-    return {"message": f"Like with ID {id} has been updated"}
+    return {"message": f"Like with publicacionid {id1} has been updated"}
 
 
 @app.put("/basket/posts/{id}")
@@ -974,12 +972,9 @@ async def update_user(id: int, user: usuarios):
 # -----------------------------------------------------------------------------------------------
 # --------------------------------------PUT REQUESTS---------------------------------------------
 # -----------------------------------------------------------------------------------------------
-
-
 # -----------------------------------------------------------------------------------------------
 # --------------------------------------DELETE REQUESTS------------------------------------------
 # -----------------------------------------------------------------------------------------------
-
 
 @app.delete("/basket/players/{player_id}")
 async def delete_player(player_id: int):
@@ -1057,62 +1052,6 @@ async def delete_user(id: int):
     await database.execute(query)
     return {"message": f"User with ID {id} has been deleted"}
 
-
 # -----------------------------------------------------------------------------------------------
 # --------------------------------------DELETE REQUESTS------------------------------------------
-# -----------------------------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------------------------
-# -------------------------------REGISTER AND SIGN IN REQUESTS-----------------------------------
-# -----------------------------------------------------------------------------------------------
-
-# Inicio y registro desde la API
-
-'''
-class UserSignup(BaseModel):
-    nombre: str
-    contrasena: str
-    correo: str
-
-
-class UserLogin(BaseModel):
-    correo: str
-    contrasena: str
-
-
-# Signup endpoint
-@app.post("/basket/signup")
-async def signup_user(user_data: UserSignup):
-    existing_user = await database.fetch_one(users.select().where(users.c.correo == user_data.correo))
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already exists")
-
-    hashed_password = sha256_crypt.hash(user_data.contrasena)
-
-    query = users.insert().values(
-        nombre=user_data.nombre,
-        contrasena=hashed_password,
-        correo=user_data.correo
-    )
-    await database.execute(query)
-
-    return {"message": "User registered successfully"}
-
-
-
-@app.post("/basket/login")
-async def login_user(user_data: UserLogin):
-    user = await database.fetch_one(users.select().where(users.c.correo == user_data.correo))
-    if user is None:
-        raise HTTPException(status_code=400, detail="User not found")
-
-    if not sha256_crypt.verify(user_data.contrasena, user['contrasena']):
-        raise HTTPException(status_code=400, detail="Invalid password")
-
-    return {"message": "User logged in successfully"}
-
-
-'''
-# -----------------------------------------------------------------------------------------------
-# -------------------------------REGISTER AND SIGN IN REQUESTS-----------------------------------
 # -----------------------------------------------------------------------------------------------
